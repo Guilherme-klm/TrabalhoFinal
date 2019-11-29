@@ -13,7 +13,8 @@ create table atendente (
 create table livro (
 	idLivro int not null primary key,
     nomeLivro varchar(100) not null,
-    disponibilidade boolean not null);
+    disponibilidade boolean not null,
+    quantidade int not null);
     
 create table retirada (
 	idRetirada int not null primary key,
@@ -25,7 +26,7 @@ create table retirada (
     foreign key (Aluno_idAluno) references aluno(idAluno),
     foreign key (Atendente_idAtendente) references atendente(idAtendente),
     foreign key (Livro_idLivro) references livro(idLivro));
-    
+
 insert into aluno values 
 (1,"José da Silva"),
 (2,"Guilherme"),
@@ -39,28 +40,28 @@ insert into aluno values
 (10,"Regina");
 
 insert into livro values 
-(1,"Javascript Ninja", 0), 
-(2,"JQuery in Action", 0), 
-(3,"500 Dias Sem Você", 0), 
-(4,"O Milagre Da Manhã", 0), 
-(5,"Do Luto Ao Nascimento", 0), 
-(6,"As Coisas Que Você Só Vê Quando Desacelera", 0), 
-(7,"O Poder do Agora", 0), 
-(8,"Nunca Foi Sorte", 0), 
-(9,"A Morte é Um Dia Que Vale A Pena Viver", 0), 
-(10,"A Coragem de Ser Imperfeito", 0),
-(11,"O Poder da Ação", 0 ), 
-(12,"Quem Pensa Enriquece", 0), 
-(13,"o Poder da Autorresponsabilidade", 0), 
-(14,"O Homem Mais Rico da Babilônia", 0), 
-(15,"Do Mil Ao Milhão", 0), 
-(16,"Os 7 Hábitos Das Pessoas Altamente Eficazes", 0), 
-(17,"Essencialismo - A Disciplinada Busca Por Menos", 0), 
-(18,"Enfodere-Se!", 0), 
-(19,"Ponto De Inflexão", 0), 
-(20,"Negocie Como Se Sua Vida Dependesse Disso", 0),
-(21,"Um Sonho de Liberdade", 1),
-(22,"Conta Comigo", 1);
+(1,"Javascript Ninja", 0, 6), 
+(2,"JQuery in Action", 0, 10), 
+(3,"500 Dias Sem Você", 0, 7), 
+(4,"O Milagre Da Manhã", 0, 8), 
+(5,"Do Luto Ao Nascimento", 0, 8), 
+(6,"As Coisas Que Você Só Vê Quando Desacelera", 0, 9), 
+(7,"O Poder do Agora", 0, 10), 
+(8,"Nunca Foi Sorte", 0, 6), 
+(9,"A Morte é Um Dia Que Vale A Pena Viver", 0, 9), 
+(10,"A Coragem de Ser Imperfeito", 0, 5),
+(11,"O Poder da Ação", 0, 7), 
+(12,"Quem Pensa Enriquece", 0, 6), 
+(13,"o Poder da Autorresponsabilidade", 0, 5), 
+(14,"O Homem Mais Rico da Babilônia", 0, 6), 
+(15,"Do Mil Ao Milhão", 0, 4), 
+(16,"Os 7 Hábitos Das Pessoas Altamente Eficazes", 0, 5), 
+(17,"Essencialismo - A Disciplinada Busca Por Menos", 0, 5), 
+(18,"Enfodere-Se!", 0, 5), 
+(19,"Ponto De Inflexão", 0, 3), 
+(20,"Negocie Como Se Sua Vida Dependesse Disso", 0, 7),
+(21,"Um Sonho de Liberdade", 1, 4),
+(22,"Conta Comigo", 1, 4);
 
 insert into atendente values 
 (1,"Tim"),
@@ -125,24 +126,25 @@ on aluno.idAluno = Aluno_idAluno
 inner join atendente
 on atendente.idAtendente = Atendente_idAtendente
 inner join livro
-on livro.idLivro = Livro_idLivro;
+on livro.idLivro = Livro_idLivro
+where dataRetirada <= curdate();
 
 -- Problema F: "O Diretor da escola deseja cobrar multa por dias de atraso na entrega dos livros". --
 delimiter //
 create function multarPorDiasDeAtraso (livro varchar(100), dataEntrega date) returns double
 begin
-declare multaTotal, multaDia, diasDeMulta double;
-declare dataDeRetirada date;
+declare multaTotal, multaDia double;
+declare calcularMulta, tempoTotalRetirada, tempoTotalLivro int;
 
-select  from retirada 
+select datediff(dataEntrega, dataRetirada), tempoFicarComLivro into tempoTotalRetirada, tempoTotalLivro from retirada 
 inner join aluno on aluno.idAluno = Aluno_idAluno 
 inner join atendente on atendente.idAtendente = Atendente_idAtendente 
 inner join livro on livro.idLivro = Livro_idLivro
 where nomeLivro = livro;
 
 set multaDia = 0.5;
-set diasDeMulta =  (dataDeRetirada + tempoLivro) - dataEntrega;
-set multaTotal = multaDia * diasDeMulta;
+set calcularMulta = tempoTotalRetirada - tempoTotalLivro;
+set multaTotal = calcularMulta * multaDia;
 return multaTotal;
 end //
 delimiter ;
@@ -150,7 +152,19 @@ select multarPorDiasDeAtraso ('Javascript Ninja', '2018-11-23');
 drop function multarPorDiasDeAtraso;
 
 -- Problema G: "A escola recebeu uma doação de livros e será necessário verificar se já existe esse livro no acervo, caso exista deve ser informado o número de exemplares, caso contrário deve ser cadastrado um novo livro" --
+delimiter //
+create function verificarLivroExiste (nome varchar(100)) returns int
+begin
+declare numero int;
 
+select count(nomeLivro)
+into numero 
+from livro
+where nomeLivro = nome;
+	
+end //
+
+delimiter ;
 
 -- Criar uma Função que retorne se um livro especifico está disponível ou não. --
 delimiter //
@@ -165,15 +179,23 @@ select verificarLivroDisponivel ('Conta Comigo');
 
 -- Criar uma Procedure que faça a reserva do livro --
 delimiter //
-create procedure fazerReserva ( in livro varchar(100))
+create procedure fazerReserva ( in livro varchar(100), in dataReserva date, in idAtendente int)
 begin
 declare idDoLivro int;
 select idLivro into idDoLivro from livro where nomeLivro = livro;
-insert into retirada values (51, '2019-12-17', 7, 9, 2, idDoLivro);
+insert into retirada values (51, dataReserva, 7, 9, idAtendente, idDoLivro);
 end //
 delimiter ;
 set @livro = 'Um Sonho de Liberdade';
 call fazerReserva (@livro);
+
+-- Criar uma procedure que faça a devolução do livro. Deve ser verificado no momento da entrega se o livro está em atraso. Caso esteja, inserir o valor da multa via procedure. --
+delimiter //
+create procedure devolucaoLivro (in livro varchar(100), in dataDevolucao date)
+begin 
+
+end //
+delimiter ;
 
 -- Criar uma procedure para inserir um novo aluno --
 delimiter //
@@ -187,5 +209,16 @@ set @nome = 'Roberto';
 call inserirNovoAluno (@id, @nome);
 select @id, @nome;
 
+-- Criar uma procedure para a cobrança de multa por atraso na entrega dos livros. O valor da multa a ser cobrado é de R$ 2,00 por dia de atraso. --
+delimiter //
+create procedure cobrancaDeMulta ()
+begin
+
+end //
+delimiter ;
+
 -- Criar uma View que retorne todos os livros que estão disponíveis --
 create view retorarLivrosDisponiveis as select nomeLivro from livro where disponibilidade = 1;
+
+-- Criar uma view que retorne por aluno, as pendências de entregas de livros informando o nome do livro, o valor da multa e os dias em atraso --
+create view retoranaPendencias as select;
